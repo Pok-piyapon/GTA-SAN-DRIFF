@@ -1,6 +1,10 @@
 package com.winlator;
 
 import android.Manifest;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.preference.PreferenceManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -150,6 +154,8 @@ public class SARunnerActivity extends AppCompatActivity {
         col.addView(header("3. เล่น"));
         launchButton = button("เปิดเกม", v -> launch());
         col.addView(launchButton);
+        col.addView(button("ดู log การรันล่าสุด", v -> showRunLog()));
+        col.addView(button("คัดลอก log การรันล่าสุด", v -> copyRunLog()));
         col.addView(button("ตั้งค่าขั้นสูง (Winlator)", v ->
             startActivity(new Intent(this, MainActivity.class))));
 
@@ -446,7 +452,23 @@ public class SARunnerActivity extends AppCompatActivity {
         }
     }
 
+    private void showRunLog() {
+        log("=== log การรันล่าสุด (" + SARunLog.file().getPath() + ") ===");
+        log(SARunLog.tail(16 * 1024));
+    }
+
+    private void copyRunLog() {
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        cm.setPrimaryClip(ClipData.newPlainText("SA Runner run log", SARunLog.tail(48 * 1024)));
+        log("คัดลอก log การรันล่าสุดแล้ว (ส่วนท้าย 48 KB)");
+    }
+
     private void startGame(Container container, String exePath) {
+        // Turn on Wine and Box64 output so SARunLog has something to record.
+        PreferenceManager.getDefaultSharedPreferences(this).edit()
+            .putBoolean("enable_wine_debug", true)
+            .putInt("box64_logs", 1)
+            .apply();
         log("เปิด " + new File(exePath).getName() + " ใน container " + container.id);
         Intent intent = new Intent(this, XServerDisplayActivity.class);
         intent.putExtra("container_id", container.id);

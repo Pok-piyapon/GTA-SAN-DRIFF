@@ -39,6 +39,9 @@ dst = MAIN / "java/com/winlator/SARunnerActivity.java"
 shutil.copyfile(HERE / "src/SARunnerActivity.java", dst)
 print(f"copied {dst.relative_to(ROOT)}")
 
+shutil.copyfile(HERE / "src/SARunLog.java", MAIN / "java/com/winlator/SARunLog.java")
+print("copied app/src/main/java/com/winlator/SARunLog.java")
+
 # 2. Manifest: Winlator's MainActivity stops being the launcher; SARunnerActivity becomes it.
 manifest = MAIN / "AndroidManifest.xml"
 text = manifest.read_text(encoding="utf-8")
@@ -83,5 +86,10 @@ replace_once(installer, "public static void install(final MainActivity activity)
              "public static void install(final AppCompatActivity activity)")
 replace_once(installer, "public static void installIfNeeded(final MainActivity activity)",
              "public static void installIfNeeded(final AppCompatActivity activity)")
+
+# 5. Record Wine/Box64 output of each run to a file (SARunLog).
+replace_once(MAIN / "java/com/winlator/XServerDisplayActivity.java",
+             "ProcessHelper.removeAllDebugCallbacks();",
+             "ProcessHelper.removeAllDebugCallbacks();\n        SARunLog.attach(this);")
 
 print("overlay applied")
