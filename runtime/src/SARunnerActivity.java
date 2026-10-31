@@ -45,6 +45,7 @@ public class SARunnerActivity extends AppCompatActivity {
     private static final String CONTAINER_NAME = "GTA San Andreas (SA Runner)";
     private static final String PREFS = "sa_runner";
     private static final String KEY_EXE = "exe_path";
+    private static final String KEY_SETUP = "setup_path";
     private static final int REQ_STORAGE = 2001;
     /** Whole internal storage, added as drive F: so the game can live anywhere on it. */
     private static final String STORAGE_ROOT = "/storage/emulated/0";
@@ -53,6 +54,9 @@ public class SARunnerActivity extends AppCompatActivity {
     private TextView gameView;
     private TextView logView;
     private EditText pathInput;
+    private EditText setupInput;
+    private TextView setupView;
+    private Button setupButton;
     private Button installButton;
     private Button launchButton;
 
@@ -67,6 +71,7 @@ public class SARunnerActivity extends AppCompatActivity {
 
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         pathInput.setText(prefs.getString(KEY_EXE, STORAGE_ROOT + "/GTA San Andreas/gta_sa.exe"));
+        setupInput.setText(prefs.getString(KEY_SETUP, ""));
 
         if (!hasStoragePermission()) {
             ActivityCompat.requestPermissions(this, new String[]{
@@ -112,6 +117,22 @@ public class SARunnerActivity extends AppCompatActivity {
         col.addView(systemView);
         installButton = button("ติดตั้งไฟล์ระบบ (ครั้งแรกครั้งเดียว)", v -> installSystem());
         col.addView(installButton);
+
+        col.addView(header("ติดตั้งเกมจาก setup.exe (ถ้ายังไม่มีโฟลเดอร์เกม)"));
+        TextView setupHint = body();
+        setupHint.setText("แตก zip ของคุณในมือถือก่อน แล้วระบุไฟล์ setup.exe\n"
+            + "ตอนตัวติดตั้งถามที่ติดตั้ง ให้เลือกไดรฟ์ F: (= ที่เก็บข้อมูลหลัก) เช่น F:\\GTA San Andreas");
+        col.addView(setupHint);
+        setupInput = new EditText(this);
+        setupInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        setupInput.setTextSize(13);
+        setupInput.setHint(STORAGE_ROOT + "/Download/.../setup.exe");
+        col.addView(setupInput);
+        col.addView(button("ค้นหา setup.exe อัตโนมัติ", v -> autoFindSetup()));
+        setupView = body();
+        col.addView(setupView);
+        setupButton = button("รันตัวติดตั้ง", v -> runSetup());
+        col.addView(setupButton);
 
         col.addView(header("2. ไฟล์เกม"));
         TextView hint = body();
@@ -205,6 +226,11 @@ public class SARunnerActivity extends AppCompatActivity {
         gameView.setText(game == null ? "อนุญาตเข้าถึงไฟล์ก่อน แล้วกด \"ตรวจไฟล์เกม\"" : game.report);
 
         launchButton.setEnabled(perm && system && !installing && game != null && game.ok);
+
+        String setupPath = setupInput.getText().toString().trim();
+        String setupProblem = setupPath.isEmpty() ? "ยังไม่ได้ระบุ setup.exe" : checkSetup(setupPath);
+        setupView.setText(setupProblem == null ? "✓ พร้อมรันตัวติดตั้ง" : setupProblem);
+        setupButton.setEnabled(perm && system && !installing && setupProblem == null);
     }
 
     private String currentPath() {
@@ -327,6 +353,10 @@ public class SARunnerActivity extends AppCompatActivity {
     }
 
     private static void search(File dir, int depth, ArrayList<File> out) {
+        searchName(dir, depth, "gta_sa.exe", out);
+    }
+
+    private static void searchName(File dir, int depth, String target, ArrayList<File> out) {
         if (depth > 4 || out.size() >= 5) return;
         File[] files = dir.listFiles();
         if (files == null) return;
@@ -334,9 +364,9 @@ public class SARunnerActivity extends AppCompatActivity {
             String name = f.getName();
             if (f.isDirectory()) {
                 if (name.startsWith(".") || name.equals("Android")) continue;
-                search(f, depth + 1, out);
+                searchName(f, depth + 1, target, out);
             }
-            else if (name.equalsIgnoreCase("gta_sa.exe")) out.add(f);
+            else if (name.equalsIgnoreCase(target)) out.add(f);
         }
     }
 
@@ -344,7 +374,44 @@ public class SARunnerActivity extends AppCompatActivity {
 
     private void launch() {
         savePath();
-        final String exePath = currentPath();
+        launchExe(currentPath());
+    }
+
+    private void runSetup() {
+        String setupPath = setupInput.getText().toString().trim();
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SETUP, setupPath).apply();
+        log("รันตัวติดตั้ง: เลือกที่ติดตั้งเป็นไดรฟ์ F: แล้วกลับมากด \"ค้นหา gta_sa.exe อัตโนมัติ\"");
+        launchExe(setupPath);
+    }
+
+    /** Returns null when the installer path is usable, otherwise a message. */
+    private String checkSetup(String path) {
+        File f = new File(path);
+        if (!f.isFile()) return "✗ ไม่พบไฟล์: " + path;
+        if (!path.startsWith(STORAGE_ROOT + "/")) return "✗ ไฟล์ต้องอยู่ใน " + STORAGE_ROOT;
+        if (!path.toLowerCase(Locale.US).endsWith(".exe")) return "✗ ต้องเป็นไฟล์ .exe";
+        if (readPeMachine(f) == -1) return "✗ ไม่ใช่ไฟล์ Windows ที่อ่านได้";
+        return null;
+    }
+
+    private void autoFindSetup() {
+        if (!hasStoragePermission()) { log("ยังไม่ได้รับอนุญาตเข้าถึงไฟล์"); return; }
+        log("กำลังค้นหา setup.exe ...");
+        new Thread(() -> {
+            ArrayList<File> found = new ArrayList<>();
+            searchName(new File(STORAGE_ROOT), 0, "setup.exe", found);
+            runOnUiThread(() -> {
+                if (found.isEmpty()) log("ไม่พบ setup.exe");
+                else {
+                    for (File f : found) log("พบ: " + f.getPath());
+                    setupInput.setText(found.get(0).getPath());
+                }
+                refresh();
+            });
+        }).start();
+    }
+
+    private void launchExe(final String exePath) {
         ContainerManager manager = new ContainerManager(this);
         Container existing = null;
         for (Container c : manager.getContainers()) {
