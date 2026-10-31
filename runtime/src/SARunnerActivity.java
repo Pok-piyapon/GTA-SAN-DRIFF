@@ -459,15 +459,17 @@ public class SARunnerActivity extends AppCompatActivity {
 
     private void copyRunLog() {
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-        cm.setPrimaryClip(ClipData.newPlainText("SA Runner run log", SARunLog.tail(48 * 1024)));
-        log("คัดลอก log การรันล่าสุดแล้ว (ส่วนท้าย 48 KB)");
+        cm.setPrimaryClip(ClipData.newPlainText("SA Runner run log", SARunLog.tail(24 * 1024)));
+        log("คัดลอก log การรันล่าสุดแล้ว (ส่วนท้าย 24 KB)");
     }
 
     private void startGame(Container container, String exePath) {
         // Turn on Wine and Box64 output so SARunLog has something to record.
         PreferenceManager.getDefaultSharedPreferences(this).edit()
             .putBoolean("enable_wine_debug", true)
-            .putInt("box64_logs", 1)
+            // Wine errors/warnings plus exception traces; Box64's own warnings are too noisy.
+            .putString("wine_debug_channels", "err,warn,seh")
+            .putInt("box64_logs", 0)
             .apply();
         log("เปิด " + new File(exePath).getName() + " ใน container " + container.id);
         Intent intent = new Intent(this, XServerDisplayActivity.class);
