@@ -27,8 +27,8 @@ public final class SARunLog {
     }
 
     public static synchronized void attach(Context context) {
-        boolean enabled = context.getSharedPreferences("sa_runner", Context.MODE_PRIVATE)
-            .getBoolean("capture_logs", true);
+        android.content.SharedPreferences prefs = context.getSharedPreferences("sa_runner", Context.MODE_PRIVATE);
+        boolean enabled = prefs.getBoolean("capture_logs", true);
         if (!enabled) return;
         close();
         try {
@@ -36,6 +36,7 @@ public final class SARunLog {
             dir.mkdirs();
             writer = new BufferedWriter(new FileWriter(file(), false));
             writer.write("SA Runner run log " + new Date() + "\n");
+            writer.write("graphics mode: " + prefs.getString("graphics_mode_label", "?") + "\n");
             writer.flush();
         }
         catch (IOException e) {

@@ -18,6 +18,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -55,6 +57,17 @@ public class SARunnerActivity extends AppCompatActivity {
     private static final String STORAGE_ROOT = "/storage/emulated/0";
 
     private TextView systemView;
+    private RadioGroup modeGroup;
+
+    /** Graphics modes the user can switch between while we find what works on a device. */
+    private static final String[][] GRAPHICS_MODES = {
+        // label, dxwrapper, graphicsDriverConfig (vulkan part | opengl part)
+        {"DXVK + Vortek (อัตโนมัติ)", "dxvk", ""},
+        {"DXVK + Vortek (หน่วยความจำแบบ DMA Buffer)", "dxvk", "resourceMemoryType=2|"},
+        {"DXVK + Vortek (หน่วยความจำแบบ AHardwareBuffer)", "dxvk", "resourceMemoryType=3|"},
+        {"WineD3D (OpenGL ไม่ใช้ Vulkan)", "wined3d", ""},
+    };
+    private static final String KEY_MODE = "graphics_mode";
     private TextView gameView;
     private TextView logView;
     private EditText pathInput;
@@ -152,6 +165,19 @@ public class SARunnerActivity extends AppCompatActivity {
         col.addView(gameView);
 
         col.addView(header("3. เล่น"));
+        TextView modeHint = body();
+        modeHint.setText("โหมดกราฟิก (ถ้าเกมเด้งออก ลองเปลี่ยนโหมดแล้วเปิดใหม่)");
+        col.addView(modeHint);
+        modeGroup = new RadioGroup(this);
+        int savedMode = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_MODE, 0);
+        for (int i = 0; i < GRAPHICS_MODES.length; i++) {
+            RadioButton rb = new RadioButton(this);
+            rb.setId(1000 + i);
+            rb.setText(GRAPHICS_MODES[i][0]);
+            modeGroup.addView(rb);
+        }
+        modeGroup.check(1000 + Math.max(0, Math.min(savedMode, GRAPHICS_MODES.length - 1)));
+        col.addView(modeGroup);
         launchButton = button("เปิดเกม", v -> launch());
         col.addView(launchButton);
         col.addView(button("ดู log การรันล่าสุด", v -> showRunLog()));
@@ -463,7 +489,22 @@ public class SARunnerActivity extends AppCompatActivity {
         log("คัดลอก log การรันล่าสุดแล้ว (ส่วนท้าย 24 KB)");
     }
 
+    private int selectedMode() {
+        int id = modeGroup.getCheckedRadioButtonId() - 1000;
+        return id >= 0 && id < GRAPHICS_MODES.length ? id : 0;
+    }
+
     private void startGame(Container container, String exePath) {
+        int mode = selectedMode();
+        String[] m = GRAPHICS_MODES[mode];
+        container.setDXWrapper(m[1]);
+        container.setGraphicsDriverConfig(m[2]);
+        container.saveData();
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+            .putInt(KEY_MODE, mode)
+            .putString("graphics_mode_label", m[0])
+            .apply();
+        log("โหมดกราฟิก: " + m[0]);
         // Turn on Wine and Box64 output so SARunLog has something to record.
         PreferenceManager.getDefaultSharedPreferences(this).edit()
             .putBoolean("enable_wine_debug", true)
