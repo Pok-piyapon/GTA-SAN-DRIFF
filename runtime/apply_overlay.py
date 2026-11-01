@@ -87,6 +87,17 @@ replace_once(installer, "public static void install(final MainActivity activity)
 replace_once(installer, "public static void installIfNeeded(final MainActivity activity)",
              "public static void installIfNeeded(final AppCompatActivity activity)")
 
+# 6. GTA SA touch-control profile, shown automatically when the launcher asks for it.
+shutil.copyfile(HERE / "assets/controls-50.icp", MAIN / "assets/inputcontrols/profiles/controls-50.icp")
+print("copied app/src/main/assets/inputcontrols/profiles/controls-50.icp")
+replace_once(MAIN / "java/com/winlator/XServerDisplayActivity.java",
+             "if (MainActivity.DEBUG_MODE) rootView.addView(AppUtils.createDebugMsgTextView(this));",
+             "if (shortcut == null && getIntent().hasExtra(\"controls_profile_id\")) {\n"
+             "            ControlsProfile saProfile = inputControlsManager.getProfile(getIntent().getIntExtra(\"controls_profile_id\", 0));\n"
+             "            if (saProfile != null) showInputControls(saProfile);\n"
+             "        }\n\n"
+             "        if (MainActivity.DEBUG_MODE) rootView.addView(AppUtils.createDebugMsgTextView(this));")
+
 # 5. Record Wine/Box64 output of each run to a file (SARunLog).
 replace_once(MAIN / "java/com/winlator/XServerDisplayActivity.java",
              "ProcessHelper.removeAllDebugCallbacks();",

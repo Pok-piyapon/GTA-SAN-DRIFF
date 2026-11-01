@@ -68,6 +68,21 @@ public class SARunnerActivity extends AppCompatActivity {
         {"WineD3D (OpenGL ไม่ใช้ Vulkan)", "wined3d", ""},
     };
     private static final String KEY_MODE = "graphics_mode";
+
+    /** Virtual screen sizes. The game's own resolution (Options > Display Setup) should match. */
+    private static final String[][] SCREEN_SIZES = {
+        {"800x600 (ค่าเริ่มต้นของเกม 4:3)", "800x600"},
+        {"1024x768 (4:3)", "1024x768"},
+        {"1280x720 (16:9)", "1280x720"},
+        {"1600x720 (เต็มจอมือถือ 20:9)", "1600x720"},
+    };
+    private static final String KEY_SCREEN = "screen_size";
+    private RadioGroup screenGroup;
+
+    /** Touch-control profile shipped in assets (runtime/assets/controls-50.icp). */
+    private static final int GTA_PROFILE_ID = 50;
+    private static final String GTA_PROFILE_ASSET = "inputcontrols/profiles/controls-50.icp";
+    private static final int GTA_PROFILE_VERSION = 1;
     private TextView gameView;
     private TextView logView;
     private EditText pathInput;
@@ -178,6 +193,20 @@ public class SARunnerActivity extends AppCompatActivity {
         }
         modeGroup.check(1000 + Math.max(0, Math.min(savedMode, GRAPHICS_MODES.length - 1)));
         col.addView(modeGroup);
+
+        TextView screenHint = body();
+        screenHint.setText("ขนาดหน้าจอ (ตั้งในเกมให้ตรงกัน: Options > Display Setup > Advanced > Resolution)");
+        col.addView(screenHint);
+        screenGroup = new RadioGroup(this);
+        int savedScreen = getSharedPreferences(PREFS, MODE_PRIVATE).getInt(KEY_SCREEN, 0);
+        for (int i = 0; i < SCREEN_SIZES.length; i++) {
+            RadioButton rb = new RadioButton(this);
+            rb.setId(2000 + i);
+            rb.setText(SCREEN_SIZES[i][0]);
+            screenGroup.addView(rb);
+        }
+        screenGroup.check(2000 + Math.max(0, Math.min(savedScreen, SCREEN_SIZES.length - 1)));
+        col.addView(screenGroup);
         launchButton = button("เปิดเกม", v -> launch());
         col.addView(launchButton);
         col.addView(button("ดู log การรันล่าสุด", v -> showRunLog()));
@@ -489,6 +518,24 @@ public class SARunnerActivity extends AppCompatActivity {
         log("คัดลอก log การรันล่าสุดแล้ว (ส่วนท้าย 24 KB)");
     }
 
+    /** Copies the GTA SA touch layout into Winlator's profile folder (again when its version changes). */
+    private void installGtaControlsProfile() {
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        File target = new File(com.winlator.inputcontrols.InputControlsManager.getProfilesDir(this), "controls-50.icp");
+        if (target.isFile() && prefs.getInt("gta_profile_version", 0) >= GTA_PROFILE_VERSION) return;
+        try (java.io.InputStream in = getAssets().open(GTA_PROFILE_ASSET);
+             java.io.FileOutputStream out = new java.io.FileOutputStream(target)) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            prefs.edit().putInt("gta_profile_version", GTA_PROFILE_VERSION).apply();
+            log("ติดตั้งปุ่มควบคุม GTA SA แล้ว");
+        }
+        catch (Exception e) {
+            log("ติดตั้งปุ่มควบคุมไม่สำเร็จ: " + e.getMessage());
+        }
+    }
+
     private int selectedMode() {
         int id = modeGroup.getCheckedRadioButtonId() - 1000;
         return id >= 0 && id < GRAPHICS_MODES.length ? id : 0;
@@ -498,6 +545,12 @@ public class SARunnerActivity extends AppCompatActivity {
         int mode = selectedMode();
         String[] m = GRAPHICS_MODES[mode];
         container.setDXWrapper(m[1]);
+        int screen = screenGroup.getCheckedRadioButtonId() - 2000;
+        if (screen < 0 || screen >= SCREEN_SIZES.length) screen = 0;
+        container.setScreenSize(SCREEN_SIZES[screen][1]);
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt(KEY_SCREEN, screen).apply();
+        log("ขนาดหน้าจอ: " + SCREEN_SIZES[screen][1]);
+        installGtaControlsProfile();
         container.setGraphicsDriverConfig(m[2]);
         container.saveData();
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
@@ -516,6 +569,7 @@ public class SARunnerActivity extends AppCompatActivity {
         Intent intent = new Intent(this, XServerDisplayActivity.class);
         intent.putExtra("container_id", container.id);
         intent.putExtra("exec_path", exePath);
+        intent.putExtra("controls_profile_id", GTA_PROFILE_ID);
         startActivity(intent);
     }
 }
